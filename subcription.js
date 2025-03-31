@@ -1,19 +1,10 @@
 /**
  * TechMayank Newsletter Subscription Handler
- * Handles newsletter subscription form submission and displays appropriate messages
- * Updated with already subscribed email detection
+ * Fixed version to properly handle subscription status messages
  */
 document.addEventListener('DOMContentLoaded', function() {
     // Find the subscription form on the page
     const subscribeForm = document.getElementById('mc-embedded-subscribe-form');
-    
-    // Mock database of already subscribed emails (in production, this would be server-side)
-    // This is just for demonstration - in a real implementation, you'd check against your actual database
-    const subscribedEmails = [
-        'example@email.com',
-        'user@domain.com',
-        'subscriber@techmayank.com'
-    ];
     
     // If the form exists on this page, set up the subscription handlers
     if (subscribeForm) {
@@ -54,121 +45,132 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Form submission handling
         subscribeForm.addEventListener('submit', function(e) {
-            // First, check if the email is already subscribed
+            e.preventDefault(); // Always prevent default to handle form submission manually
+            
             const emailValue = emailInput.value.trim().toLowerCase();
             
             // Hide any previous messages
-            mceSuccessResponse.style.display = 'none';
-            mceErrorResponse.style.display = 'none';
-            subscribeStatus.style.display = 'none';
-            alreadySubscribedMessage.style.display = 'none';
-            
-            // Check if email is already in our subscribed list
-            if (subscribedEmails.includes(emailValue)) {
-                // Prevent form submission
-                e.preventDefault();
-                
-                // Show already subscribed message
-                alreadySubscribedMessage.style.display = 'block';
-                
-                // Hide the message after 5 seconds
-                setTimeout(function() {
-                    alreadySubscribedMessage.style.display = 'none';
-                }, 5000);
-                
-                return;
-            }
+            hideAllMessages();
             
             // Check if email is valid
             if (emailInput.validity.valid) {
                 // Show loading state
-                subscribeButton.classList.add('loading');
-                subscribeButton.disabled = true;
-                subscribeButton.textContent = 'Subscribing...';
+                showLoadingState();
                 
-                // Set a timeout to handle the case when Mailchimp doesn't respond
-                setTimeout(function() {
-                    // If Mailchimp hasn't shown its response yet, show our custom one
-                    if (mceSuccessResponse.style.display === 'none' && mceErrorResponse.style.display === 'none') {
-                        // Reset button
-                        subscribeButton.classList.remove('loading');
-                        subscribeButton.disabled = false;
-                        subscribeButton.textContent = 'Subscribe';
-                        
-                        // Add to our local list (in production, this would happen server-side)
-                        subscribedEmails.push(emailValue);
-                        
-                        // Show custom success message
-                        subscribeStatus.style.display = 'block';
-                        emailInput.value = '';
-                        
-                        // Hide the custom message after 5 seconds
-                        setTimeout(function() {
-                            subscribeStatus.style.display = 'none';
-                        }, 5000);
-                    }
-                }, 3000); // Wait 3 seconds for Mailchimp response before showing our custom message
+                // Use Mailchimp's API directly instead of trying to validate emails client-side
+                submitToMailchimp(emailValue);
             }
         });
         
-        // Observer to watch for Mailchimp's success or error messages
-        const observerConfig = { attributes: true, attributeFilter: ['style'] };
-        
-        // Create observer for success response
-        const successObserver = new MutationObserver(function(mutations) {
-            mutations.forEach(function(mutation) {
-                if (mutation.target.style.display !== 'none') {
-                    // Reset button state
-                    subscribeButton.classList.remove('loading');
-                    subscribeButton.disabled = false;
-                    subscribeButton.textContent = 'Subscribe';
-                    
-                    // Add to our local list (in production, this would happen server-side)
-                    subscribedEmails.push(emailInput.value.trim().toLowerCase());
-                    
-                    // Clear email field
-                    emailInput.value = '';
-                    
-                    // Hide our custom messages if they're showing
-                    subscribeStatus.style.display = 'none';
-                    alreadySubscribedMessage.style.display = 'none';
-                    
-                    // Hide Mailchimp message after 5 seconds
-                    setTimeout(function() {
-                        mutation.target.style.display = 'none';
-                    }, 5000);
-                }
-            });
-        });
-        
-        // Create observer for error response
-        const errorObserver = new MutationObserver(function(mutations) {
-            mutations.forEach(function(mutation) {
-                if (mutation.target.style.display !== 'none') {
-                    // Reset button state
-                    subscribeButton.classList.remove('loading');
-                    subscribeButton.disabled = false;
-                    subscribeButton.textContent = 'Subscribe';
-                    
-                    // Hide our custom messages if they're showing
-                    subscribeStatus.style.display = 'none';
-                    alreadySubscribedMessage.style.display = 'none';
-                    
-                    // Hide Mailchimp error message after 5 seconds
-                    setTimeout(function() {
-                        mutation.target.style.display = 'none';
-                    }, 5000);
-                }
-            });
-        });
-        
-        // Start observing Mailchimp response elements
-        if (mceSuccessResponse) {
-            successObserver.observe(mceSuccessResponse, observerConfig);
+        function hideAllMessages() {
+            // Hide all possible message elements
+            mceSuccessResponse.style.display = 'none';
+            mceErrorResponse.style.display = 'none';
+            subscribeStatus.style.display = 'none';
+            alreadySubscribedMessage.style.display = 'none';
         }
         
-        if (mceErrorResponse) {
-            errorObserver.observe(mceErrorResponse, observerConfig);
+        function showLoadingState() {
+            subscribeButton.classList.add('loading');
+            subscribeButton.disabled = true;
+            subscribeButton.textContent = 'Subscribing...';
+        }
+        
+        function resetButtonState() {
+            subscribeButton.classList.remove('loading');
+            subscribeButton.disabled = false;
+            subscribeButton.textContent = 'Subscribe';
+        }
+        
+        // Function to submit to Mailchimp
+        function submitToMailchimp(email) {
+            // Get form's action URL and convert it to the JSON endpoint
+            const actionUrl = subscribeForm.getAttribute('action').replace('post?', 'post-json?');
+            
+            // Add callback parameter for JSONP
+            const url = actionUrl + '&c=?';
+            
+            // Create form data from the form
+            const formData = new FormData(subscribeForm);
+            
+            // Use jQuery if available for JSONP (which Mailchimp requires)
+            if (window.jQuery) {
+                jQuery.ajax({
+                    type: 'GET',
+                    url: url,
+                    data: formData,
+                    dataType: 'jsonp',
+                    contentType: "application/json; charset=utf-8",
+                    success: function(response) {
+                        resetButtonState();
+                        
+                        // Check response from Mailchimp
+                        if (response.result === 'success') {
+                            // New subscriber success
+                            mceSuccessResponse.style.display = 'block';
+                            emailInput.value = '';
+                            
+                            setTimeout(function() {
+                                mceSuccessResponse.style.display = 'none';
+                            }, 5000);
+                        } else {
+                            // Handle error cases
+                            if (response.msg && response.msg.toLowerCase().includes('already subscribed')) {
+                                // If already subscribed message from Mailchimp
+                                alreadySubscribedMessage.style.display = 'block';
+                                
+                                setTimeout(function() {
+                                    alreadySubscribedMessage.style.display = 'none';
+                                }, 5000);
+                            } else {
+                                // Other errors
+                                mceErrorResponse.innerHTML = response.msg;
+                                mceErrorResponse.style.display = 'block';
+                                
+                                setTimeout(function() {
+                                    mceErrorResponse.style.display = 'none';
+                                }, 5000);
+                            }
+                        }
+                    },
+                    error: function() {
+                        // Handle AJAX errors
+                        resetButtonState();
+                        
+                        // Generic error handling
+                        mceErrorResponse.innerHTML = '<p>There was an error processing your subscription. Please try again later.</p>';
+                        mceErrorResponse.style.display = 'block';
+                        
+                        setTimeout(function() {
+                            mceErrorResponse.style.display = 'none';
+                        }, 5000);
+                    }
+                });
+            } else {
+                // Fallback when jQuery is not available
+                const hiddenForm = document.createElement('form');
+                hiddenForm.method = 'POST';
+                hiddenForm.action = subscribeForm.getAttribute('action');
+                hiddenForm.style.display = 'none';
+                
+                // Add email field
+                const emailField = document.createElement('input');
+                emailField.type = 'email';
+                emailField.name = 'EMAIL';
+                emailField.value = email;
+                hiddenForm.appendChild(emailField);
+                
+                // Copy any other fields from original form
+                const otherFields = subscribeForm.querySelectorAll('input:not([type="email"]):not([type="submit"])');
+                otherFields.forEach(field => {
+                    const clone = field.cloneNode(true);
+                    hiddenForm.appendChild(clone);
+                });
+                
+                // Add form to body and submit
+                document.body.appendChild(hiddenForm);
+                hiddenForm.submit();
+            }
         }
     }
 });
